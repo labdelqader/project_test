@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Server Config Setup</title>
+    <meta name="description" content="Server Config Setup">
+    <meta name="author" content="Layth Abdelqader">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <!--[if lt IE 9]>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.js"></script>
+    <![endif]-->
+    <style>
+      p {
+        margin:0;
+        padding-bottom: 1rem;
+      }
+      code {
+        margin: 1.5rem 0;
+        display: inline-block;
+        padding: 0.75rem;
+      }
+      ul {
+        margin:1rem 0;
+      }
+      ul li code,
+      p code {
+        margin:0;
+        padding-top:0;
+        padding-bottom:0;
+      }
+      .container {
+        max-width: 640px;
+      }
+      footer {
+        margin-top:2rem;
+      }
+      footer p {
+        border-top:1px solid #333;
+        padding:2rem 0;
+        text-align: center
+      }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <section id="intro">
+            <h1>Spin up a virtual server (ubuntu w/ nodejs) w/ Jenkins/Apache2</h1>
+            <p>Things to keep in mind:</p>
+            <ul>
+                <li>Obviously spin up a VM with Ubuntu + NodeJS and follow the steps below</li>
+                <li>Add your local ssh key to the server to bypass password login</li>
+                <li>Have your codebase stored on some VCS like Github or Bitbucket (private or public)</li>
+            </ul>
+        </section>
+        <section id="init">
+            <h2>Init Login</h2>
+            <p>SSH login as root</p>
+            <code>ssh root@server_ip_address</code>
+            <p>Next we want to update the server to the latest patches</p>
+            <code>sudo apt-get update && sudo apt-get upgrade</code>
+            <p>*optional* uninstall old packages</p>
+            <code>sudo apt-get autoremove</code>
+            <p>Lets install a few packages which will help us with our Jenkins process:</p>
+            <code>sudo apt-get install zip<br>
+            sudo apt-get install unzip</code>
+        </section>
+        <section id="userConfig">
+            <h2>User Config</h2>
+            <p>Create new user and assign sudo rights to new user</p>
+            <code>adduser user_name<br>
+            gpasswd -a username sudo</code>
+            <p>log in as new user</p>
+            <code>su - user_name</code>
+            <p>Grab your local public key</p>
+            <code>$local cat ~/.ssh/id_rsa.pub</code>
+            <p>Next, copy your public key</p>
+            <p>Back to your server, run the following to add your pub key to new user</p>
+            <code>mkdir .ssh<br>
+            chmod 700 .ssh<br>
+            nano .ssh/authorized_keys</code>
+            <p>Copy your key into that authorized_keys</p>
+            <code>chmod 600 .ssh/authorized_keys</code>
+            <p>Go head and exit out of the root user and lets log in with as our new user</p>
+            <code>ssh user_name@server_ip_address</code>
+            <p>Lastly, lets config our SSH settings to disable root login and password login</p>
+            <code>sudo nano /etc/ssh/sshd_config<br>
+            PermitRootLogin no<br>
+            PermitEmptyPassword no<br>
+            sudo service ssh restart</code>
+        </section>
+        <section id="firewall">
+            <h2>Setting up the Firewall</h2>
+            <p>Lets permit ssh on port:22</p>
+            <code>sudo ufw allow ssh<br>
+            sudo ufw allow 80/tcp</code>
+            <p>Lets review the config before we enable</p>
+            <code>sudo ufw show added</code>
+            <p>Lets enable the new config!</p>
+            <code>sudo ufw enable</code>
+            <p>Next is getting the NTP (Network Time Protocol) set up</p>
+            <code>sudo apt-get update<br>
+            sudo apt-get install ntp</code>
+            <p>Next, lets install and edit fail2ban</p>
+            <code>sudo apt-get update<br>
+            sudo apt-get install fail2ban<br>
+            sudo cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.local<br>
+            sudo nano /etc/fail2ban/jail.local</code>
+            <p>*Note, you can update the bantime, findtime, and maxretry if necessary</p>
+            <p>Lets restart!</p>
+            <code>sudo service fail2ban restart</code><br>
+            <small>Reference taken from: <a href="https://justinzimmerman.net/post/ubuntu-server-configuration/">Justin Zimmerman</a></small>
+        </section>
+        <section id="apache">
+            <h2>Setting up Apache on our VM</h2>
+            <p>This is helpful if you plan on hosting single/multiple websites on a single instance. Apache web server is the most popular way of serving web content. You will need the following prerequisites before moving forward:</p>
+            <ul>
+              <li>Ubuntu server w/ a non-root <code>sudo</code> user</li>
+              <li>A firewall set up (<a href="#firewall">click here</a>)</li>
+              <li>At least 512mb - 1024mb of ram available</li>
+            </ul>
+            <p>Process is pretty simple and painless. You're going to get Apache installed via <code>apt-get</code>. For this guide, I will be using <code>example.com</code> and <code>test.com</code> as values for domains below.</p>
+            <p>Lets start with the basic CLI command below:</p>
+            <code>sudo apt-get update<br>
+            sudo apt-get install apache2</code>
+            <p>Once the above steps are completed, we're going to want to create a directory structure to hold our content. Apache looks to <code>/var/www</code> directory for serving content.</p>
+            <p>Lets start with creating our directories for both sites:</p>
+            <code>sudo mkdir -p /var/www/example.com/public_html<br>
+            sudo mkdir -p /var/www/test.com/public_html</code>
+            <p>Next, we're going to grant permissions to those directories to read/write</p>
+            <code>sudo chown -R $USER:$USER /var/www/example.com/public_html<br>
+            sudo chown -R $USER:$USER /var/www/test.com/public_html</code>
+            <p>The <code>$USER</code> variable will take the value of your current logged in username. Once you press enter, the permissions will be rewritten from <code>root</code> to <code>user_name</code>.</p>
+            <p>We should also correct the permissions for the web directory so it can be properly served up.</p>
+            <code>sudo chmod -R 755 /var/www</code>
+            <p>Then, we will now create new virtual host files! Virtual host files are files that will dictate how the Apache web server will respond to various domain requests. Out of the box, Apache comes with a default host file called <code>000-default.conf</code> which will be our starting point. (This is the host file that <code>/var/www/html</code> is defaulted to). Lets start by coping the file for the first domain:</p>
+            <code>sudo cp /etc/apache2/sites-available/000-default.conf /etc/apache2/sites-available/example.com.conf</code>
+            <p>Next, you're going to open the file up in the nano editor with root privileges:</p>
+            <code>sudo nano /etc/apache2/sites-available/example.com.conf</code>
+            <p>You will see something similar like this (Comments have been removed to make the file readable).</p>
+            <code>
+              &lt;VirtualHost *:80&gt;<br>
+              &nbsp;&nbsp;ServerAdmin webmaster@localhost<br>
+              &nbsp;&nbsp;DocumentRoot /var/www/html<br>
+              &nbsp;&nbsp;ErrorLog ${APACHE_LOG_DIR}/error.log<br>
+              &nbsp;&nbsp;CustomLog ${APACHE_LOG_DIR}/access.log combined<br>
+              &lt;/VirtualHost&gt;
+            </code>
+            <p>As you would have guessed, let's go head and replace some of the default content with our own. Our virtual host file should look like this:</p>
+            <code>
+              &lt;VirtualHost *:80&gt;<br>
+              &nbsp;&nbsp;ServerAdmin admin@example.com<br>
+              &nbsp;&nbsp;ServerName example.com<br>
+              &nbsp;&nbsp;ServerAlias www.example.com<br>
+              &nbsp;&nbsp;DocumentRoot /var/www/example.com/public_html<br>
+              &nbsp;&nbsp;ErrorLog ${APACHE_LOG_DIR}/error.log<br>
+              &nbsp;&nbsp;CustomLog ${APACHE_LOG_DIR}/access.log combined<br>
+              &lt;/VirtualHost&gt;
+            </code>
+            <p>Lets save and close the file. Next, we will copy the same file above and do it for the second domain and so fourth.</p>
+            <code>sudo cp /etc/apache2/sites-available/example.com.conf /etc/apache2/sites-available/test.com.conf<br><br>
+              // Run the following command next<br>
+              sudo nano /etc/apache2/sites-available/test.com.conf<br><br>
+              // This should be the end result<br>
+              &lt;VirtualHost *:80&gt;<br>
+                &nbsp;&nbsp;ServerAdmin admin@test.com<br>
+                &nbsp;&nbsp;ServerName test.com<br>
+                &nbsp;&nbsp;ServerAlias www.test.com<br>
+                &nbsp;&nbsp;DocumentRoot /var/www/test.com/public_html<br>
+                &nbsp;&nbsp;ErrorLog ${APACHE_LOG_DIR}/error.log<br>
+                &nbsp;&nbsp;CustomLog ${APACHE_LOG_DIR}/access.log combined<br>
+              &lt;/VirtualHost&gt;
+            </code>
+            <p>Go head and save the file when you're finished.</p>
+            <p>Finally, we can now enable the new virtual host files! Since Apache is so nice to us by offering us tools to do this, lets use the <code>a2ensite</code> tool to enable each of our sites like this:</p>
+            <code>sudo a2ensite example.com.conf<br>
+            sudo a2ensite test.com.conf
+            </code>
+            <p>Upon finishing, you'll need to restart Apache to have these changes take effect:</p>
+            <code>sudo service apache2 restart</code>
+            <p>You'll most likely receive some sort of message along the lines of <code>Restarting web server apache2</code>. This is normal and harmless.</p>
+            <p>You may now test your results by pinging your server <code>ping example.com</code> or <code>ping test.com</code> or by visiting it directly. You <strong>should</strong> see an empty directory listing.</p>
+            <p>Your next step is now to add some web content into your directories!</p>
+            <br>
+            <small>Reference taken from: <a href="//www.digitalocean.com/community/tutorials/how-to-set-up-apache-virtual-hosts-on-ubuntu-14-04-lts">Digital Ocean</a></small>
+        </section>
+        <section id="jenkins">
+            <h2>Continuous Integration (CI) w/ Jenkins</h2>
+            <p>CI/CD is the next best thing for developers right now. It helps with build our local applications and deployment much faster than anything else. Jenkins is an open source server which is intended to make tasks with CI and CD much smoother. In this step-by-step tutorial, we will begin to install Jenkins.</p>
+            <p>Let's add the repo key to our system:</p>
+            <code>wget -q -O - https://pkg.jenkins.io/debian/jenkins-ci.org.key | sudo apt-key add -</code>
+            <p>The system will return a <code>OK</code>. Next we will need to append the Debian package repo address to the servers <code>sources.list</code>.</p>
+            <code>echo deb http://pkg.jenkins.io/debian-stable binary/ | sudo tee /etc/apt/sources.list.d/jenkins.list</code>
+            <p>After both of these are in place, let's run <code>update</code> so that <code>apt-get</code> will use the new repo:</p>
+            <code>sudo apt-get update</code>
+            <p>Finally, let's install Jenkins and it's dependences including Java:</p>
+            <code>sudo apt-get install jenkins</code>
+            <p>Well will you look at that? You've just installed Jenkins! But, let's not stop there. Let's start it! Using <code>systemctrl</code>, run the following command: (note: do not freak if you do not see anything output)</p>
+            <code>sudo systemctl start jenkins</code>
+            <p>To make sure Jenkins started, let's check the system status by running the following command:</p>
+            <code>sudo systemctl status jenkins</code>
+            <p>You should see some sort of status along the lines of the <code>jenkins.service</code> is loaded/active. Now that Jenkins is setup, let's adjust our Firewall so we're able to access it from the web browser.</p>
+            <p>By default, Jenkins runs on <code>port:8080</code> so we will open that port by using <code>ufw</code>, like before.</p>
+            <code>sudo ufw allow 8080</code>
+            <p>Lets check the status of UFW:</p>
+            <code>sudo ufw status</code>
+            <p>We should see that traffic is allowed to <code>port:8080</code> by the output displayed from UFW.</p>
+            <p>Lets run this next command to execute the new port to allow traffic:</p>
+            <code>sudo ufw enable</code>
+            <br>
+            <p>To finish setting up Jenkins, let's visit Jenkins at it's default port of <code>:8080</code> by visiting <code>http://ip_address_or_domain_name:8080</code>.</p>
+            <p>We should see a "Unlock Jenkins" screen, which displays the location of the initial password on the Jenkins server. So, in the terminal, lets use the <code>cat</code> command to display our password:</p>
+            <code>sudo cat /var/lib/jenkins/secrets/initialAdminPassword</code>
+            <p>Upon copying and pasting the 32-character password from the terminal to the input field in Jenkins, you will then see a screen for Customizing Jenkins. For this demo and the ease of this installation, let's click on the <strong>Install suggested plugins</strong>.</p>
+            <p>When the installation is complete, you'll be prompted to set up the first admin account. You <em>can</em> skip it, but take the moment and create a user. After completing the user part, you'll see the confirmation screen that Jenkins is ready.</p>
+            <p>You can now surf through the Jenkins GUI. Have fun building!</p>
+            <br>
+            <p>*Optional but useful*<br>
+              <a href="https://www.digitalocean.com/community/tutorials/how-to-configure-jenkins-with-ssl-using-an-nginx-reverse-proxy">Configure Jenkins with SSL</a></p>
+            <br>
+            <small>Reference taken from: <a href="//www.digitalocean.com/community/tutorials/how-to-install-jenkins-on-ubuntu-16-04">Digital Ocean</a></small>
+        </section>
+        <section id="jenkinsgithub">
+          <h2>Jenkins CI w/ Github</h2>
+          <p>Lets have some fun, shall we?</p>
+          <p>Assuming you're using Github (sorry, not sorry bitbucket users), let's log into our account > repo > settings tab > webhooks. Lets set up a webhook for Jenkins.</p>
+          <code>Payload URL: http://server_ip_address_or_domain_name:8080/github-webhook/<br>
+          Content type: application/json<br>
+          Secret: leave empty<br>
+          Select the "Just the push event" trigger<br>
+          Make sure the checkbox for Active is selected
+          </code>
+          <p>Lets add the webhook! What this allows us to do is whenever we do a <code>git push</code> to Github, it will trigger a callback function to Jenkins which will fire a build off. Neat, right?</p>
+          <p>Lets get down and dirty with Jenkins. This is what you came for, isn't it?</p>
+          <p>Log into the <code>Jenkins GUI > Manage Jenkins > Manage Plugins</code> and click on the <strong>Available</strong> tab to view the list of available plugins for Jenkins. The one we're looking for is <code>Publish Over SSH</code>. Click on the checkbox and click on "Install without restart". The next screen should say something along the lines of it being installed and there is a click-to to restart your Jenkins server if there are no jobs running, which you should since you do not have any jobs running.</p>
+          <p>Once that is finished, lets head over to <code>Manage Jenkins > Configure System</code> and scroll to <strong>Publish over SSH</strong>. Let's fill out our information by specifying the <code>Path to key</code> to the directory of the private key which should be <code>.ssh/id_rsa</code>. (*note* this is for the jenkins user for the jenkins service).</p>
+          <p>Per the note above, we must create an SSH key for the jenkins user. Use the snippet below to create the key:</p>
+          <code>sudo su -s /bin/bash jenkins<br>
+          ssh-keygen<br>
+          cat ~/.ssh/id_rsa.pub</code>
+          <p>Copy the public key and exit from the jenkins user. We want to go back to our newly user account that we created earlier. We need to add the jenkins user pub key to our user account under the authorized keys by doing this:</p>
+          <code>nano ~/.ssh/authorized_keys</code>
+          <p>Paste your key at the end and save it.</p>
+          <p>Enter through and then head back to the Jenkins GUI and add a server to the SSH area by filling out your server's information.<br>*protip* set the remote directory to <code>/var/www/</code> or something similar so this can be used globally.</p>
+          <p>Afterwards, 
+          <p>Next, lets move onto creating our first job! Head back to the main view (click on the Jenkins logo) and go to <strong>New Item</strong>. Lets type in a item name &ndash; for example, lets do "project_test". Next, click on the Folder (we will be organizing our builds this way). Upon pressing OK, you will then see a new view which is inside of your folder. We will then want to create a new item (aka job) and name this one "build production" for instance and do this type of job as a "Freestyle Project".</p>
+          <p>At this point, we will start building our CI out in this process. Lets head down to "Source Code Management" and click on the "GIT" radio button. Here is where we specify what repo and branch to pull from Github. Input your <code>.git</code> project url as if you were running this command from your CLI as <code>git clone</code>. Once you've pasted in your Git project url, you may see a warning for "Host Key Verification". This is obviously due to authenticating your repo with Jenkins (if you were using the SSH url and if your repo is private). But, for this sake of a tutorial, lets use a public repo! If you <strong>strong</strong> using a private repo and needed to enter your credentials in to authenticate, click the "ADD" button below next to the word <strong>Credentials</strong> and use your "project_test" as the provider. This part should be pretty self explanatory.</p>
+          <p>Lets move on, shall we?</p>
+          <p>The next field is.. oh hey. BRANCHES!. By default, your master branch is selected. For this demo, it is fine to leave it as is.</p>
+          <p>The next step is crucial &ndash; be sure to check the checkbox for <code>GitHub hook trigger for GITScm polling</code> under <strong>Build Triggers</strong>!. This is very important to how Github/Jenkins communicate with each other!</p>
+          <p>Under <strong>Build Environment</strong>, lets check the box <code>Delete workspace before build starts</code> to ensure we start with a clean workspace directory.</p>
+          <p>Following that is to execute a shell command which we will need it to zip up our files from Github as an artifact. So, under <strong>Build</strong> in the dropdown, select <code>Execute Shell</code>. Run the following command below in the shell input:</p>
+          <code>cd $WORKSPACE<br>
+          zip -r dist *</code>
+          <p>The command above is saying lets go to the current directory of the workspace (hence the shell variable thanks to Jenkins for providing it to us) and zip up (recursively) all the files in the directory and throw it into a compressed folder named <code>dist.zip</code>. Easy enough right?</p>
+          <p>Under the <strong>Post-build Actions</strong>, lets select from the dropdown <strong>Archive the artifacts</strong>. Well, this should be pretty easy to fill in &ndash; put <code>dist.zip</code>.</p>
+          <p>Finally, under the <strong>Post-build Actions</strong> dropdown, select <code>Send build artifacts over SSH</code>. For the transfers section, please reference below:</p>
+          <code>Source files: dist.zip<br>
+          Remove prefix: [empty]<br>
+          Remote directory: example.com/public_html/<br>
+          Exec command: cd /var/www/example.com/public_html/<br>
+		  unzip -o dist.zip<br>
+		  rm dist.zip
+          </code>
+        </section>
+        <h3>Now go have fun and start pushing and watch magic happen</h3>
+    </div>
+    <footer>
+      <div class="container">
+        <p><a href="//laythabdelader.com">Layth Abdelqader</a> &ndash; 2017 &copy;</p>
+      </div>
+    </footer>
+</body>
+</html>
